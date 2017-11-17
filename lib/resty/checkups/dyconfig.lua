@@ -1,6 +1,7 @@
 local cjson         = require "cjson.safe"
 
 local base          = require "resty.checkups.base"
+local try           = require "resty.checkups.try"
 local subsystem     = require "resty.subsystem"
 
 local worker_id     = ngx.worker.id
@@ -87,7 +88,8 @@ local function shd_config_syncer(premature)
                 log(INFO, "get ", skey, " from shm: ", shd_servers)
                 if shd_servers then
                     shd_servers = cjson.decode(shd_servers)
-                    base.upstream.checkups[skey] = base.table_dup(shd_servers)
+                    local ups = base.table_dup(shd_servers)
+                    try.init_state(ups)
                 elseif err then
                     success = false
                     log(WARN, "failed to get from shm: ", err)

@@ -16,3 +16,6 @@ install: all
 test: all
 	util/lua-releng
 	PATH=$(OPENRESTY_PREFIX)/nginx/sbin:$$PATH prove -I../test-nginx/lib -r t/
+
+balance: all
+	$(OPENRESTY_PREFIX)/bin/resty t/lib/balance-chash.lua `pwd`

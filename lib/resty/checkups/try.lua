@@ -229,4 +229,16 @@ function _M.try_cluster(skey, request_cb, opts)
 end
 
 
+function _M.init_state(ups)
+    if ups.mode ~= nil then
+        for level, cls in pairs(ups.cluster) do
+            local servers = cls.servers
+            if type(servers) == "table" and next(servers) then
+                consistent_hash.init_consistent_hash_state(servers)
+            end
+        end
+    end
+end
+
+
 return _M

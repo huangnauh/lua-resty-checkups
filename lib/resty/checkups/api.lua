@@ -121,9 +121,10 @@ function _M.prepare_checker(config)
 
     for skey, ups in pairs(config) do
         if type(ups) == "table" and type(ups.cluster) == "table" then
-            base.upstream.checkups[skey] = base.table_dup(ups)
-
-            for level, cls in pairs(base.upstream.checkups[skey].cluster) do
+            local new_ups = base.table_dup(ups)
+            try.init_state(new_ups)
+            base.upstream.checkups[skey] = new_ups
+            for level, cls in pairs(new_ups.cluster) do
                 base.extract_servers_from_upstream(skey, cls)
             end
         end
