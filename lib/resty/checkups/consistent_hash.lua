@@ -22,7 +22,7 @@ local function hash_string(str)
 end
 
 
-local function init_consistent_hash_state(servers)
+local function init_state(servers)
     local weight_sum = 0
     for _, srv in ipairs(servers) do
         weight_sum = weight_sum + (srv.weight or 1)
@@ -62,10 +62,10 @@ local function binary_search(circle, key)
 end
 
 
-function _M.next_consistent_hash_server(servers, peer_cb, hash_key)
+function _M.next_server(servers, peer_cb, opts)
     local is_tab = require "resty.checkups.base".is_tab
     servers.chash = is_tab(servers.chash) and servers.chash
-                    or init_consistent_hash_state(servers)
+                    or init_state(servers)
 
     local chash = servers.chash
     if chash.members == 1 then
@@ -73,11 +73,11 @@ function _M.next_consistent_hash_server(servers, peer_cb, hash_key)
             return servers[1]
         end
 
-        return nil, "consistent hash: no servers available"
+        return nil, nil, "consistent hash: no servers available"
     end
 
     local circle = chash.circle
-    local st = binary_search(circle, hash_string(hash_key))
+    local st = binary_search(circle, hash_string(opts.hash_key))
     local size = #circle
     local ed = st + size - 1
     for i = st, ed do  -- TODO: algorithm O(n)
@@ -87,11 +87,11 @@ function _M.next_consistent_hash_server(servers, peer_cb, hash_key)
         end
     end
 
-    return nil, "consistent hash: no servers available"
+    return nil, nil, "consistent hash: no servers available"
 end
 
 
-function _M.free_consitent_hash_server(srv, failed)
+function _M.free_server(srv, failed)
     return
 end
 

@@ -13,7 +13,7 @@ return:
     - (table) server
     - (string) error
 --]]
-function _M.next_round_robin_server(servers, peer_cb)
+function _M.next_server(servers, peer_cb)
     local srvs_cnt = #servers
 
     if srvs_cnt == 1 then
@@ -21,7 +21,7 @@ function _M.next_round_robin_server(servers, peer_cb)
             return servers[1], nil
         end
 
-        return nil, "round robin: no servers available"
+        return nil, nil, "round robin: no servers available"
     end
 
     -- select round robin server
@@ -51,17 +51,17 @@ function _M.next_round_robin_server(servers, peer_cb)
     end
 
     if not best then
-        return nil, "round robin: no servers available"
+        return nil, nil, "round robin: no servers available"
     end
 
     best.current_weight = best.current_weight - weight_sum
 
-    return best, nil
+    return best
 end
 
 
 
-function _M.free_round_robin_server(srv, failed)
+function _M.free_server(srv, failed)
     if not failed then
         return
     end

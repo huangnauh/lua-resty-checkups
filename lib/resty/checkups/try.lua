@@ -3,16 +3,21 @@
 local cjson           = require "cjson.safe"
 local round_robin     = require "resty.checkups.round_robin"
 local consistent_hash = require "resty.checkups.consistent_hash"
+local shard           = require "resty.checkups.shard"
 local base            = require "resty.checkups.base"
 
 local max        = math.max
 local sqrt       = math.sqrt
 local floor      = math.floor
 local tab_insert = table.insert
+local str_sub    = string.sub
+local str_format = string.format
 local tostring   = tostring
 
 local update_time     = ngx.update_time
 local now             = ngx.now
+local log             = ngx.log
+local ERR             = ngx.ERR
 
 local _M = { _VERSION = "0.11" }
 
@@ -59,12 +64,22 @@ local function prepare_callbacks(skey, opts)
         return ups.cluster[cls_key]
     end
 
-
     -- get next select server
+    local try_limit = opts.try or ups.try or srvs_cnt
     local mode = ups.mode
-    local next_server_func = round_robin.next_round_robin_server
-    local key
-    if mode ~= nil then
+    local module = round_robin
+    local mopts
+    if mode == "shard" then
+        local replicas = opts.replicas or ups.replicas
+        local slots = opts.slots or ups.slots
+        try_limit = opts.try or ups.try or replicas
+        local request_uri = ngx.var.request_uri
+        local shard_key = opts.shard_key or str_sub(request_uri, 2)
+        local shard_idx = shard.shard_idx(shard_key, slots)
+        mopts = { shard_key=shard_key, shard_idx=shard_idx, replicas=replicas }
+        module = shard
+    elseif mode ~= nil then
+        local key
         if mode == "hash" then
             key = opts.hash_key or ngx.var.uri
         elseif mode == "url_hash" then
@@ -74,13 +89,12 @@ local function prepare_callbacks(skey, opts)
         elseif mode == "header_hash" then
             key = ngx.var.http_x_hash_key or ngx.var.uri
         end
-
-        next_server_func = consistent_hash.next_consistent_hash_server
+        mopts = { hash_key=key }
+        module = consistent_hash
     end
     local next_server_cb = function(servers, peer_cb)
-        return next_server_func(servers, peer_cb, key)
+        return module.next_server(servers, peer_cb, mopts)
     end
-
 
     -- check whether ther server is available
     local bad_servers = {}
@@ -109,7 +123,6 @@ local function prepare_callbacks(skey, opts)
         statuses = ups.http_opts.statuses
     end
     local try_cnt = 0
-    local try_limit = opts.try or ups.try or srvs_cnt
     local retry_cb = function(res)
         if is_tab(res) and res.status and is_tab(statuses) then
             if statuses[tostring(res.status)] ~= false then
@@ -144,15 +157,11 @@ local function prepare_callbacks(skey, opts)
 
 
     -- set some status
-    local free_server_func = round_robin.free_round_robin_server
-    if mode == "hash" then
-        free_server_func = consistent_hash.free_consitent_hash_server
-    end
     local set_status_cb = function(srv, failed)
         local key = ("%s:%s:%s"):format(cls_key, srv.host, srv.port)
         bad_servers[key] = failed
         base.set_srv_status(skey, srv, failed)
-        free_server_func(srv, failed)
+        module.free_server(srv, failed)
     end
 
 
@@ -203,10 +212,15 @@ function _M.try_cluster(skey, request_cb, opts)
             break
         end
 
-        for srv, err in itersrvs(cls.servers, peer_cb) do
+        for srv, opts, err in itersrvs(cls.servers, peer_cb) do
+            if err then
+                log(ERR, str_format("skey %s iter err: %s", skey, err))
+                return nil, err
+            end
+
             -- exec request callback by server
             local start_time = now()
-            res, err = request_cb(srv.host, srv.port)
+            res, err = request_cb(srv.host, srv.port, opts)
 
             -- check whether need retry
             local end_time = now()
