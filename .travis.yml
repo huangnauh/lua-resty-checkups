@@ -9,7 +9,7 @@ services:
 env:
     - V_OPENRESTY=1.9.15.1
 install:
-    - cpanm -v --notest Test::Nginx
+    - sudo cpanm --notest Test::Nginx > build.log 2>&1 || (cat build.log && exit 1)
 before_script:
     - sudo apt-get update -q
     - sudo apt-get install libreadline-dev libncurses5-dev libpcre3-dev libssl-dev -y
